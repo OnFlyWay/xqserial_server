@@ -36,7 +36,7 @@ StatusPublisher::StatusPublisher()
     {
         status[i]=0;
     }
-    car_status.encoder_ppr=4*12*64;
+    car_status.encoder_ppr=4*400;
 
    mPose2DPub = mNH.advertise<geometry_msgs::Pose2D>("xqserial_server/Pose2D",1,true);
    mStatusFlagPub = mNH.advertise<std_msgs::Int32>("xqserial_server/StatusFlag",1,true);
@@ -64,7 +64,11 @@ StatusPublisher::StatusPublisher(double separation,double radius)
 
 void StatusPublisher::Update(const char data[], unsigned int len)
 {
+  // if(len <1) return;
+  // static char data2[1024];
+  // static int len2=0;
     boost::mutex::scoped_lock lock(mMutex);
+
     int i=0,j=0;
     int * receive_byte;
     static unsigned char last_str[2]={0x00,0x00};
@@ -78,6 +82,12 @@ void StatusPublisher::Update(const char data[], unsigned int len)
     //int ii=0;
     //boost::mutex::scoped_lock lock(mMutex);
 
+    // if(len<119)
+    // {
+    //   std::cout<<"len0:"<<len<<std::endl;
+    //   current_str=data[0];
+    //   std::cout<<(unsigned int)current_str<<std::endl;
+    // }
     for(i=0;i<len;i++)
     {
         current_str=data[i];
@@ -129,6 +139,7 @@ void StatusPublisher::Update(const char data[], unsigned int len)
                         {
                             memcpy(&receive_byte[j],&cmd_string_buf[5*j],4);
                         }
+                        mbUpdated=true;
                     }
                     else if(new_packed_ok_len==95)
                     {
@@ -136,43 +147,126 @@ void StatusPublisher::Update(const char data[], unsigned int len)
                         {
                             memcpy(&receive_byte[j],&cmd_string_buf[5*j],4);
                         }
+                        mbUpdated=true;
                     }
-                    mbUpdated=true;
+                    if(mbUpdated)
+                    {
+                      for(j=0;j<7;j++)
+                      {
+                          if(cmd_string_buf[5*j+4]!=32)
+                          {
+                            //   std::cout<<"len:"<< len <<std::endl;
+                            //   std::cout<<"delta_encoder_car:"<< car_status.encoder_delta_car <<std::endl;
+                            //   for(j=0;j<115;j++)
+                            //   {
+                            //     current_str=cmd_string_buf[j];
+                            //     std::cout<<(unsigned int)current_str<<std::endl;
+                            //   }
+                            mbUpdated=false;
+                            car_status.encoder_ppr=1600;
+                            break;
+                          }
+                      }
+                    }
+                    // if(mbUpdated&&(car_status.encoder_delta_car>3000||car_status.encoder_delta_car<-3000))
+                    // {
+                    //   std::cout<<"len:"<< len <<std::endl;
+                    //   std::cout<<"delta_encoder_car:"<< car_status.encoder_delta_car <<std::endl;
+                    //   for(j=0;j<115;j++)
+                    //   {
+                    //     current_str=cmd_string_buf[j];
+                    //     std::cout<<(unsigned int)current_str<<std::endl;
+                    //   }
+                    //   std::cout<<"last len:"<<len2<<std::endl;
+                    //   for(j=0;j<len2;j++)
+                    //   {
+                    //     current_str=data2[j];
+                    //     std::cout<<(unsigned int)current_str<<std::endl;
+                    //   }
+                    //   std::cout<<"current:"<<std::endl;
+                    //   for(j=0;j<len;j++)
+                    //   {
+                    //     current_str=data[j];
+                    //     std::cout<<(unsigned int)current_str<<std::endl;
+                    //   }
+                    // }
+
                     //ii++;
                     //std::cout << ii << std::endl;
                     new_packed_ok_len=0;
+                    new_packed_len=0;
                 }
             }
 
         }
 
     }
+    // for(j=0;j<len;j++)
+    // {
+    //   len2++;
+    //   if(len2==1024) len2=1;
+    //   data2[len2-1]=data[j];
+    // }
+
     return;
 }
 
 
 void StatusPublisher::Refresh()
 {
-
+     boost::mutex::scoped_lock lock(mMutex);
+     static double theta_last=0.0;
+     static unsigned int ii=0;
+     ii++;
     //std::cout<<"runR"<< mbUpdated<<std::endl;
     if(mbUpdated)
     {
-        // Time
-        ros::Time current_time = ros::Time::now();
-        //pose
-        double delta_car,delta_x,delta_y,delta_theta,var_len,var_angle;
+      // Time
+      ros::Time current_time = ros::Time::now();
+      //pose
+      double delta_car,delta_x,delta_y,delta_theta,var_len,var_angle;
+
 
         var_len=(50.0f/car_status.encoder_ppr*2.0f*PI*wheel_radius)*(50.0f/car_status.encoder_ppr*2.0f*PI*wheel_radius);
         var_angle=(0.01f/180.0f*PI)*(0.01f/180.0f*PI);
 
-        delta_car=car_status.encoder_delta_car*1.0f/car_status.encoder_ppr*2.0f*PI*wheel_radius;
+        delta_car=(car_status.encoder_delta_r+car_status.encoder_delta_l)/2.0f*1.0f/car_status.encoder_ppr*2.0f*PI*wheel_radius;
+        if(delta_car>0.05||delta_car<-0.05)
+        {
+          // std::cout<<"get you!"<<std::endl;
+          delta_car=0;
+        }
+        // if(ii%50==0||car_status.encoder_delta_car>3000||car_status.encoder_delta_car<-3000)
+        // {
+        //   std::cout<<"delta_encoder_car:"<< car_status.encoder_delta_car <<std::endl;
+        //   std::cout<<"delta_encoder_r:"<< car_status.encoder_delta_r <<std::endl;
+        //   std::cout<<"delta_encoder_l:"<< car_status.encoder_delta_l <<std::endl;
+        //   std::cout<<"ppr:"<< car_status.encoder_ppr <<std::endl;
+        //   std::cout<<"delta_car:"<< delta_car <<std::endl;
+        // }
         delta_x=delta_car*cos(CarPos2D.theta* PI / 180.0f);
         delta_y=delta_car*sin(CarPos2D.theta* PI / 180.0f);
 
+        delta_theta=car_status.theta-theta_last;
+        if(car_status.theta>=0&&car_status.theta<=360)
+        {
+          theta_last=car_status.theta;
+        }
+        else
+        {
+          delta_theta=0;
+        }
+        if(delta_theta>10||delta_theta<-10)
+        {
+          delta_theta = 0;
+        }
         CarPos2D.x+=delta_x;
         CarPos2D.y+=delta_y;
-        delta_theta=car_status.theta-CarPos2D.theta;
-        CarPos2D.theta=car_status.theta;
+        CarPos2D.theta+=delta_theta;
+
+        if(CarPos2D.theta>360.0) CarPos2D.theta-=360;
+        if(CarPos2D.theta<0.0) CarPos2D.theta+=360;
+
 
         mPose2DPub.publish(CarPos2D);
 
@@ -227,7 +321,7 @@ void StatusPublisher::Refresh()
         br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "odom", "base_footprint"));
 
         ros::spinOnce();
-        boost::mutex::scoped_lock lock(mMutex);
+
         mbUpdated = false;
     }
 }

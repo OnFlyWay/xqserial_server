@@ -7,14 +7,16 @@ namespace xqserial_server
 
 DiffDriverController::DiffDriverController()
 {
-    max_wheelspeed=2.0;
+    max_wheelspeed=6.0;
     cmd_topic="cmd_vel";
     xq_status=new StatusPublisher();
     cmd_serial=NULL;
+    MoveFlag=true;
 }
 
 DiffDriverController::DiffDriverController(double max_speed_,std::string cmd_topic_,StatusPublisher* xq_status_,CallbackAsyncSerial* cmd_serial_)
 {
+    MoveFlag=true;
     max_wheelspeed=max_speed_;
     cmd_topic=cmd_topic_;
     xq_status=xq_status_;
@@ -26,7 +28,31 @@ void DiffDriverController::run()
     ros::NodeHandle nodeHandler;
     ros::Subscriber sub = nodeHandler.subscribe(cmd_topic, 1, &DiffDriverController::sendcmd, this);
     ros::Subscriber sub2 = nodeHandler.subscribe("/imu_cal", 1, &DiffDriverController::imuCalibration,this);
+    ros::Subscriber sub3 = nodeHandler.subscribe("/globalMoveFlag", 1, &DiffDriverController::updateMoveFlag,this);
+    ros::Subscriber sub4 = nodeHandler.subscribe("/elevatorPose", 1, &DiffDriverController::updateElePose,this);
+    ros::Subscriber sub5 = nodeHandler.subscribe("/barDetectFlag", 1, &DiffDriverController::updateBarDetectFlag,this);
     ros::spin();
+}
+void DiffDriverController::updateElePose(const std_msgs::UInt32& elePose)
+{
+
+  if(elePose.data>=10&&elePose.data<=20)
+  {
+    //下发底层舵机命令
+    char cmd_str[6]={0xcd,0xeb,0xd7,0x02,'h',0x0f};
+    if(NULL!=cmd_serial)
+    {
+        cmd_str[5]=elePose.data;
+        cmd_serial->write(cmd_str,6);
+
+    }
+  }
+}
+void DiffDriverController::updateMoveFlag(const std_msgs::Bool& moveFlag)
+{
+  boost::mutex::scoped_lock lock(mMutex);
+  MoveFlag=moveFlag.data;
+
 }
 void DiffDriverController::imuCalibration(const std_msgs::Bool& calFlag)
 {
@@ -36,7 +62,28 @@ void DiffDriverController::imuCalibration(const std_msgs::Bool& calFlag)
     char cmd_str[5]={0xcd,0xeb,0xd7,0x01,0x43};
     if(NULL!=cmd_serial)
     {
-        cmd_serial->write(cmd_str,13);
+        cmd_serial->write(cmd_str,5);
+    }
+  }
+}
+void DiffDriverController::updateBarDetectFlag(const std_msgs::Bool& DetectFlag)
+{
+  if(DetectFlag.data)
+  {
+    //下发底层红外开启命令
+    char cmd_str[6]={0xcd,0xeb,0xd7,0x02,0x44,0x01};
+    if(NULL!=cmd_serial)
+    {
+        cmd_serial->write(cmd_str,6);
+    }
+  }
+  else
+  {
+    //下发底层红外禁用命令
+    char cmd_str[6]={0xcd,0xeb,0xd7,0x02,0x44,0x00};
+    if(NULL!=cmd_serial)
+    {
+        cmd_serial->write(cmd_str,6);
     }
   }
 }
@@ -56,14 +103,28 @@ void DiffDriverController::sendcmd(const geometry_msgs::Twist &command)
     //转换速度单位，由米转换成转
     speed_lin=command.linear.x/(2.0*PI*radius);
     speed_ang=command.angular.z*separation/(2.0*PI*radius);
+
+    float scale=std::max(std::abs(speed_lin+speed_ang/2.0),std::abs(speed_lin-speed_ang/2.0))/max_wheelspeed;
+    if(scale>1.0)
+    {
+      scale=1.0/scale;
+    }
+    else
+    {
+      scale=1.0;
+    }
     //转出最大速度百分比,并进行限幅
-    speed_temp[0]=(speed_lin+speed_ang/2)/max_wheelspeed*100.0;
+    speed_temp[0]=scale*(speed_lin+speed_ang/2)/max_wheelspeed*100.0;
     speed_temp[0]=std::min(speed_temp[0],100.0);
     speed_temp[0]=std::max(-100.0,speed_temp[0]);
 
-    speed_temp[1]=(speed_lin-speed_ang/2)/max_wheelspeed*100.0;
+    speed_temp[1]=scale*(speed_lin-speed_ang/2)/max_wheelspeed*100.0;
     speed_temp[1]=std::min(speed_temp[1],100.0);
     speed_temp[1]=std::max(-100.0,speed_temp[1]);
+
+  //std::cout<<"radius "<<radius<<std::endl;
+  //std::cout<<"ppr "<<wheel_ppr<<std::endl;
+  //std::cout<<"pwm "<<speed_temp[0]<<std::endl;
   //  command.linear.x/
     for(i=0;i<2;i++)
     {
@@ -116,7 +177,12 @@ void DiffDriverController::sendcmd(const geometry_msgs::Twist &command)
       }
     }
 
-
+    boost::mutex::scoped_lock lock(mMutex);
+    if(!MoveFlag)
+    {
+      cmd_str[5]=0x53;
+      cmd_str[6]=0x53;
+    }
     if(NULL!=cmd_serial)
     {
         cmd_serial->write(cmd_str,13);

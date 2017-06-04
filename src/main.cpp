@@ -28,14 +28,14 @@ int main(int argc, char **argv)
     double separation=0,radius=0;
     bool DebugFlag = false;
     ros::param::param<double>("~wheel_separation", separation, 0.37);
-    ros::param::param<double>("~wheel_radius", radius, 0.06);
+    ros::param::param<double>("~wheel_radius", radius, 0.035);
     ros::param::param<bool>("~debug_flag", DebugFlag, false);
     xqserial_server::StatusPublisher xq_status(separation,radius);
 
     //获取小车控制参数
     double max_speed;
     string cmd_topic;
-    ros::param::param<double>("~max_speed", max_speed, 2.0);
+    ros::param::param<double>("~max_speed", max_speed, 6.0);
     ros::param::param<std::string>("~cmd_topic", cmd_topic, "cmd_vel");
 
     try {
@@ -50,8 +50,8 @@ int main(int argc, char **argv)
           serial.write(debugFlagCmd, 5);
         }
         // send reset cmd
-        char resetCmd[] = {0xcd,0xeb,0xd7,0x01, 'I'};
-        serial.write(resetCmd, 5);
+        //char resetCmd[] = {0xcd,0xeb,0xd7,0x01, 'I'};
+        //serial.write(resetCmd, 5);
 
         ros::Rate r(50);//发布周期为50hz
         while (ros::ok())
