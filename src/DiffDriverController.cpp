@@ -12,6 +12,8 @@ DiffDriverController::DiffDriverController()
     xq_status=new StatusPublisher();
     cmd_serial=NULL;
     MoveFlag=true;
+    last_ordertime=ros::WallTime::now();
+
 }
 
 DiffDriverController::DiffDriverController(double max_speed_,std::string cmd_topic_,StatusPublisher* xq_status_,CallbackAsyncSerial* cmd_serial_)
@@ -21,6 +23,9 @@ DiffDriverController::DiffDriverController(double max_speed_,std::string cmd_top
     cmd_topic=cmd_topic_;
     xq_status=xq_status_;
     cmd_serial=cmd_serial_;
+    speed_debug[0]=0.0;
+    speed_debug[1]=0.0;
+    last_ordertime=ros::WallTime::now();
 }
 
 void DiffDriverController::run()
@@ -112,6 +117,7 @@ void DiffDriverController::sendcmd(const geometry_msgs::Twist &command)
     for(i=0;i<2;i++)
     {
      speed[i]=speed_temp[i];
+     speed_debug[i]=speed_temp[i];
      if(speed[i]<0)
      {
          cmd_str[5+i]=0x42;//B
@@ -170,7 +176,7 @@ void DiffDriverController::sendcmd(const geometry_msgs::Twist &command)
     {
         cmd_serial->write(cmd_str,13);
     }
-
+    last_ordertime=ros::WallTime::now();
    // command.linear.x
 }
 

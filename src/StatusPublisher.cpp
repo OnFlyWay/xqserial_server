@@ -37,7 +37,7 @@ StatusPublisher::StatusPublisher()
     {
         status[i]=0;
     }
-    car_status.encoder_ppr=4*12*64;
+    car_status.encoder_ppr=4*1024;
 
    mPose2DPub = mNH.advertise<geometry_msgs::Pose2D>("xqserial_server/Pose2D",1,true);
    mStatusFlagPub = mNH.advertise<std_msgs::Int32>("xqserial_server/StatusFlag",1,true);
@@ -165,7 +165,7 @@ void StatusPublisher::Update(const char data[], unsigned int len)
                             //     std::cout<<(unsigned int)current_str<<std::endl;
                             //   }
                             mbUpdated=false;
-                            car_status.encoder_ppr=4*12*64;
+                            car_status.encoder_ppr=4*1024;
                             break;
                           }
                       }
@@ -487,8 +487,11 @@ int StatusPublisher::get_wheel_ppr(){
 
 void StatusPublisher::get_wheel_speed(double speed[2]){
     //右一左二
-    speed[0]=car_status.omga_r/car_status.encoder_ppr*2.0*PI*wheel_radius;
-    speed[1]=car_status.omga_l/car_status.encoder_ppr*2.0*PI*wheel_radius;
+    //speed[0]=car_status.omga_r*2.0*PI*wheel_radius/car_status.encoder_ppr;
+    //speed[1]=car_status.omga_l*2.0*PI*wheel_radius/car_status.encoder_ppr;
+    speed[0]=car_status.omga_r*20.0/car_status.encoder_ppr;
+    speed[1]=car_status.omga_l*20.0/car_status.encoder_ppr;
+    ROS_INFO("%f %f %d %d %d\n",speed[0],speed[1],car_status.omga_r,car_status.omga_l,car_status.encoder_ppr);
 }
 
 geometry_msgs::Pose2D StatusPublisher::get_CarPos2D(){
