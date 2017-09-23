@@ -89,6 +89,14 @@ void DiffDriverController::sendcmd(const geometry_msgs::Twist &command)
     radius=xq_status->get_wheel_radius();
     wheel_ppr=xq_status->get_wheel_ppr();
     //转换速度单位，由米转换成转
+    double vx_temp,vtheta_temp;
+    vx_temp=command.linear.x;
+    vtheta_temp=command.angular.z;
+    if(std::fabs(vx_temp)<0.3)
+    {
+      if(vtheta_temp>0.02&&vtheta_temp<0.3) vtheta_temp=0.3;
+      if(vtheta_temp<-0.02&&vtheta_temp>-0.3) vtheta_temp=-0.3;
+    }
     speed_lin=command.linear.x/(2.0*PI*radius);
     speed_ang=command.angular.z*separation/(2.0*PI*radius);
 
